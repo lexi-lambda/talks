@@ -1172,13 +1172,13 @@
     (define defn:eff
       @haskell{
         data Eff f a where
-          Return :: a -> Eff a
-          Then   :: f a -> (a -> Eff b) -> Eff b})
+          Return :: a -> Eff f a
+          Then   :: f a -> (a -> Eff f b) -> Eff f b})
     (define defn:state
       @haskell{
         data State s a where
           Get    :: State s s
-          Put    :: s -> State ()}))
+          Put    :: s -> State s ()}))
 
   (slides ([s:stage 1])
     #:timeline (tl:sequence s:stage (in-range 1 7))
