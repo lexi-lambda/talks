@@ -38,7 +38,21 @@
     (~> (rsvg-isolate (svg-file->pict tweag.svg))
         (scale-to-fit 100 +inf.0))))
 
-(define CONFERENCE-NAME "Lambda Days 2023")
+(define current-venue
+  (make-parameter
+   (match (environment-variables-ref (current-environment-variables) #"VENUE")
+     [(or #f #"lambda-days") 'lambda-days]
+     [#"zurihac"             'zurihac])))
+
+(define (current-venue-name)
+  (match (current-venue)
+    ['lambda-days "Lambda Days 2023"]
+    ['zurihac     "ZuriHac 2023"]))
+
+(define (current-syntax)
+  (match (current-venue)
+    ['lambda-days 'pseudo]
+    ['zurihac     'haskell]))
 
 ;; ---------------------------------------------------------------------------------------------------
 
@@ -609,6 +623,94 @@
       (scale (current-text-size))
       (tag 'hole _)))
 
+(define current-syntax-tt (make-parameter haskell))
+
+(define (::)
+  (define tt (current-syntax-tt))
+  (match (current-syntax)
+    ['pseudo  @tt{:}]
+    ['haskell @tt{::}]))
+
+(define (False)
+  (define tt (current-syntax-tt))
+  (match (current-syntax)
+    ['pseudo @tt{false}]
+    ['haskell @tt{False}]))
+
+(define (True)
+  (define tt (current-syntax-tt))
+  (match (current-syntax)
+    ['pseudo @tt{true}]
+    ['haskell @tt{True}]))
+
+(define (haskell-tuple . args)
+  (define tt (current-syntax-tt))
+  (~> (add-between args @tt{, })
+      (append (list @tt{(}) _ (list @tt{)}))
+      (apply line-append _)))
+
+(define (app fn . args)
+  (match (current-syntax)
+    ['pseudo
+     (line-append fn (apply haskell-tuple args))]
+    ['haskell
+     (define tt (current-syntax-tt))
+     (~> (cons fn args)
+         (add-between _ @tt{ })
+         (apply line-append _))]))
+
+(define (fn-ty . elems)
+  (define tt (current-syntax-tt))
+  (match (current-syntax)
+    ['pseudo
+     (match-define (list args ... result) elems)
+     (line-append (apply haskell-tuple args) @tt{ -> } result)]
+    ['haskell
+     (apply line-append (add-between elems @tt{ -> }))]))
+
+(define (catch-args body handler)
+  (define tt (current-syntax-tt))
+  (match (current-syntax)
+    ['pseudo  @tt{{@body, @handler}}]
+    ['haskell @tt{ {@body} @handler}]))
+(define (catch-args* body handler)
+  (define tt (current-syntax-tt))
+  (match (current-syntax)
+    ['pseudo  @tt{{@body,
+                  @handler}}]
+    ['haskell @tt{ {@body}
+                   @handler}]))
+
+(define prompt-args
+  (case-lambda
+    [(body)
+     (define tt (current-syntax-tt))
+     (match (current-syntax)
+       ['pseudo  (line-append (tt "{") body (tt "}"))]
+       ['haskell (line-append (tt " {") body (tt "}"))])]
+    [(tag body)
+     (define tt (current-syntax-tt))
+     (match (current-syntax)
+       ['pseudo  (line-append (tt "{") tag (tt ", ") body (tt "}"))]
+       ['haskell (line-append (tt " ") tag (tt " {") body (tt "}"))])]))
+
+(define (lam . args)
+  (define tt (current-syntax-tt))
+  (match (current-syntax)
+    ['pseudo
+     (line-append (apply haskell-tuple args) @tt{ ->})]
+    ['haskell
+     (line-append
+      @tt{\}
+      (apply line-append (add-between args @tt{ }))
+      @tt{ ->})]))
+
+(define (juxt-parens p)
+  (define tt (current-syntax-tt))
+  (match (current-syntax)
+    ['pseudo  p]
+    ['haskell (line-append @tt{(} p @tt{)})]))
+
 ;; ---------------------------------------------------------------------------------------------------
 
 (section "Title")
@@ -619,7 +721,7 @@
                      (inset 0 -5 0 5))
                  (with-size 15
                    (hflex (+ (pict-width title) 20)
-                          (t "Alexis King, Tweag") (spring 1) (t CONFERENCE-NAME)))
+                          (t "Alexis King, Tweag") (spring 1) (t (current-venue-name))))
                  (blank 0 50))
       (colorize text-secondary-color))
   #:where
@@ -1041,7 +1143,7 @@
     (tl:flags s:thrown-away?)
 
     (~> (vc-append
-         @haskell{@t:cont{@t:cont1{1 +}} @t:redex1{exit(-1)}}
+         @haskell{@t:cont{@t:cont1{1 +}} @t:redex1{@app[@haskell{exit} @haskell{-1}]}}
          (blank 0 50)
          (pict-when (s:split?)
            (htl-append
@@ -1050,10 +1152,10 @@
                   (cellophane 0.5)
                   (cross-out #:color text-error-color)))
             (blank 70 0)
-            @haskell{@t:redex2{exit(-1)}}))
+            @haskell{@t:redex2{@app[@haskell{exit} @haskell{-1}]}}))
          (blank 0 50)
          (pict-when (s:recombine?)
-           @haskell{@t:redex3{exit(-1)}})
+           @haskell{@t:redex3{@app[@haskell{exit} @haskell{-1}]}})
          (blank 0 50)
          (pict-when (s:thrown-away?)
            @elem{Continuation is thrown away!}))
@@ -1076,13 +1178,13 @@
          #:stage (s:stage)
          #:append vc-append
          @elem{What about @haskell{throw}/@haskell{catch}?}
-         (vc-append (blank 0 70) @elem{@haskell{throw(exn)}})
+         (vc-append (blank 0 70) @elem{@app[@haskell{throw} @haskell{exn}]})
          (vc-append (blank 0 5) (~> @elem{Raises@haskell{exn} as an exception.} (scale 0.8)))
-         (vc-append (blank 0 70) @elem{@haskell{catch{body, handler}}})
+         (vc-append (blank 0 70) @elem{@haskell{catch@catch-args[@haskell{body} @haskell{handler}]}})
          (vc-append
           (blank 0 10)
           (~> (vc-append @elem{Evaluates @haskell{body}, and if an exception}
-                         @elem{is raised, evaluates @haskell{handler(exn)}.})
+                         @elem{is raised, evaluates @app[@haskell{handler} @haskell{exn}].})
               (scale 0.8))))
         (inset 50 0)))
 
@@ -1097,8 +1199,8 @@
 
     (reduction-steps
      #:stage (s:reduction-stage)
-     @haskell{1 + @t:catch{catch{2 * @t:throw{throw(5)},
-                                 @t:handler{(n) -> 3 * n}}}}
+     @haskell{1 + @t:catch{catch@catch-args*[@haskell{2 * @t:throw{@app[@haskell{throw} @haskell{5}]}}
+                                             (juxt-parens @haskell{@t:handler{@lam[@haskell{n}] 3 * n}})]}}
      @haskell{1 + @t:handler{(3 * 5)}}
      @haskell{1 + 15}
      @haskell{16}))
@@ -1114,8 +1216,8 @@
     (c:highlights '()) (s:cross-out? #f) (next)
 
     (~> (vc-append
-         @haskell{@t:cont{1 + catch{2 * @t:redex1{throw(5)},
-                          @t:cont1{          }(n) -> 3 * n}}}
+         @haskell{@t:cont{@t:cont1{1 + catch@catch-args*[@haskell{2 * @t:redex1{@app[@haskell{throw} @haskell{5}]}}
+                                                         (juxt-parens @haskell{@t:handler{@lam[@haskell{n}] 3 * n}})]}}}
          (blank 0 50)
          (pict-when (s:split?)
            (hc-append
@@ -1127,11 +1229,11 @@
                           (cross-out #:color text-error-color))
                         (tag 'inner-cont _)))
                   @haskell{@t:cont{@t:cont2{
-                    @t:outer-cont{1 +} catch{@inner-cont @hole[],
-                              (n) -> 3 * n}}}})
+                    @t:outer-cont{1 +} catch@catch-args*[@haskell{@inner-cont @hole[]}
+                                                         (juxt-parens @haskell{@lam[@haskell{n}] 3 * n})]}}})
                 (delay-highlight 'inner-cont))
             (blank 70 0)
-            @haskell{@t:redex2{throw(5)}}))
+            @haskell{@t:redex2{@app[@haskell{throw} @haskell{5}]}}))
          (blank 0 50)
          (pict-when (s:recombine?)
            (vc-append
@@ -1163,7 +1265,8 @@
     (~> (steps
          #:stage (s:stage)
          #:append vc-append
-         (vc-append (blank 0 50) @haskell{@t:outer-cont{1 +} catch{@t:inner-cont{2 * @hole[]}, (n) -> 3 * n}})
+         (vc-append (blank 0 50) @haskell{@t:outer-cont{1 +} catch@catch-args[@haskell{@t:inner-cont{2 * @hole[]}}
+                                                                              (juxt-parens @haskell{@lam[@haskell{n}] 3 * n})]})
          (~> (vc-append
               10
               (blank 0 20)
@@ -1171,7 +1274,7 @@
                   (when~> (s:cross-out?)
                     (cellophane 0.5)
                     (cross-out #:color text-error-color)))
-              (tag 'catch-frame (wrap-box @haskell{catch{@hole[], (n) -> 3 * n}}))
+              (tag 'catch-frame (wrap-box @haskell{catch@catch-args[@hole[] (juxt-parens @haskell{@lam[@haskell{n}] 3 * n})]}))
               (tag 'outer-frame (wrap-box #:highlight 'outer-cont @haskell{1 + @hole[]})))
              (unless~> (s:cross-out?)
                (pin-arrow-tail 'inner-frame (adjust-find lb-find 20 0) #:start-angle (turns 3/4)
@@ -1202,15 +1305,15 @@
      (scale @elem{“@(blank -25 0)@mathv{A} reduces to@mathv{B}.”} 0.9)
      (vc-append
       (blank 0 30)
-      @elem{@haskell{not(false)} @matht{⟶} @haskell{true }})
-     @elem{@haskell{not(true) } @matht{⟶} @haskell{false}}
+      @elem{@app[@haskell{not} @False[]] @matht{⟶} @haskell{@True[] }})
+     @elem{@haskell{@app[@haskell{not} @True[]] } @matht{⟶} @False[]}
      (vc-append
       (blank 0 30)
-      @elem{@haskell{if true  then @e_1[] else @e_2[]} @matht{⟶} @e_1[]})
-     @elem{@haskell{if false then @e_1[] else @e_2[]} @matht{⟶} @e_2[]}
+      @elem{@haskell{if @True[]  then @e_1[] else @e_2[]} @matht{⟶} @e_1[]})
+     @elem{@haskell{if @False[] then @e_1[] else @e_2[]} @matht{⟶} @e_2[]}
      (vc-append
       (blank 0 50)
-      @elem{@haskell{if not(false) then 1 else 2}?})))
+      @elem{@haskell{if @app[@haskell{not} @False[]] then 1 else 2}?})))
 
   (slides ([s:split? #f] [s:rule? #f] [s:reduce? #f] [s:recombine? #f])
     #:with c:flavors (hash 'cont 1 'value 2 'redex3 2 'redex4 2)
@@ -1224,7 +1327,7 @@
     (tl:flags s:reduce? s:recombine?)
 
     (~> (vc-append
-         @haskell{@t:cont{@t:cont1{if}} @t:redex1{not(false)} @t:cont{then 1 else 2}}
+         @haskell{@t:cont{@t:cont1{if}} @t:redex1{@app[@haskell{not} @False[]]} @t:cont{then 1 else 2}}
          (blank 0 70)
          (pict-when (s:split?)
            (htl-append
@@ -1232,14 +1335,14 @@
             (blank 70 0)
             (reduction-steps
              #:stage (if (s:reduce?) 2 1)
-             @haskell{@t:redex2{not(false)}}
-             @haskell{@t:redex3{true}})))
+             @haskell{@t:redex2{@app[@haskell{not} @False[]]}}
+             @haskell{@t:redex3{@True[]}})))
          (blank 0 70)
          (pict-when (s:recombine?)
-           @haskell{@t:cont{@t:cont3{if}} @t:redex4{true} @t:cont{then 1 else 2}}))
+           @haskell{@t:cont{@t:cont3{if}} @t:redex4{@True[]} @t:cont{then 1 else 2}}))
         (pin-over 'redex2 (adjust-find lb-find 40 20) #:hole rt-find
                   (pict-when (s:rule?)
-                    (~> @elem{@haskell{@t:redex{not(false)}} @matht{⟶} @haskell{@t:value{true}}}
+                    (~> @elem{@haskell{@t:redex{@app[@haskell{not} @False[]]}} @matht{⟶} @haskell{@t:value{@True[]}}}
                         wrap-box
                         (scale 0.8))))
         (when~> (s:split?)
@@ -1266,12 +1369,13 @@
      #:append vc-append
      (~> (let ()
            (define term (if (s:strike?) tt haskell))
-           @elem[#:color #f]{@term{not(false)} @matht{⟶} @term{true}})
+           (parameterize ([current-syntax-tt term])
+             @elem[#:color #f]{@app[@term{not} @False[]] @matht{⟶} @True[]}))
          (when~> (s:strike?)
            strikethrough
            (colorize text-tertiary-color))
          elem)
-     @elem{@E[@haskell{not(false)}] @matht{⟶} @E[@haskell{true}]}
+     @elem{@E[@haskell{@app[@haskell{not} @False[]]}] @matht{⟶} @E[@True[]]}
      (vc-append
       (blank 0 40)
       (paras
@@ -1284,8 +1388,8 @@
       (paras
        #:stage (s:example)
        @elem{@aligned[@mathv{E}] @matht{=} @haskell{if @hole[] then 1 else 2}}
-       @elem{@aligned[@mathv{x}] @matht{=} @haskell{not(false)}}
-       @elem{@E:x @matht{=} @haskell{if not(false) then 1 else 2}})))
+       @elem{@aligned[@mathv{x}] @matht{=} @haskell{@app[@haskell{not} @False[]]}}
+       @elem{@E:x @matht{=} @haskell{if @app[@haskell{not} @False[]] then 1 else 2}})))
 
     #:where
     (define E:x @E[@mathv{x}])
@@ -1306,11 +1410,12 @@
      (scale @elem{Why bother with all of this?} 1.1)
      (vc-append
       (blank 0 50)
-      @elem{@E[#:tag 'exit-cont @haskell{exit(@mathv{v})}] @matht{⟶} @haskell{exit(@mathv{v})}})
+      @elem{@E[#:tag 'exit-cont @app[@haskell{exit} @mathv{v}]] @matht{⟶} @app[@haskell{exit} @mathv{v}]})
      (vc-append
       (blank 0 30)
-      (~> @elem{@E_1[#:tag 'catch-cont1 @haskell{catch{@E_2[#:tag 'catch-cont2 @haskell{throw(@t:catch-resume[@mathv{v}])}], @t:catch-resume[@mathv{f}]}}]
-                @matht{⟶} @E_1[#:tag 'catch-cont1 @haskell{@t:catch-resume{@mathv{f}(@mathv{v})}}]}
+      (~> @elem{@E_1[#:tag 'catch-cont1 @haskell{catch@catch-args[@E_2[#:tag 'catch-cont2 @app[@haskell{throw} @t:catch-resume[@mathv{v}]]]
+                                                                  @t:catch-resume[@mathv{f}]]}]
+                @matht{⟶} @E_1[#:tag 'catch-cont1 @haskell{@t:catch-resume{@app[@mathv{f} @mathv{v}]}}]}
           (delay-highlight 'catch-resume)))
      (vc-append
       (blank 0 50)
@@ -1336,12 +1441,12 @@
      40
      (wrap-lam @haskell{1 + (@hole* * 2)})
      (wrap-lam @haskell{if @hole* > 0 then 1 else -1})
-     (wrap-lam @haskell{f(catch{throw(@hole*), handle})}))
+     (wrap-lam @app[@haskell{f} (juxt-parens @haskell{catch@catch-args[@app[@haskell{throw} @hole*] @haskell{handle}]})]))
     #:where
     (define hole*
       (tag 'hole* (if (s:plug?) @haskell{x} (hole))))
     (define (wrap-lam p)
-      (define lam-p @haskell{(x) ->})
+      (define lam-p @lam[@haskell{x}])
       @haskell{@(pict-when (s:quantify?) (t:lambda lam-p)) @p @(ghost lam-p)}))
 
   (slides ([s:stage 0])
@@ -1362,8 +1467,8 @@
      (vc-append (blank 0 20) @elem{“call with current continuation”})
      (vc-append
       (blank 0 60)
-      (~> @elem{@E[#:tag 'cont @haskell{call_cc(@t:fn{@mathv{f}})}] @matht{⟶}
-                @E[#:tag 'cont @haskell{@t:fn{@mathv{f}}(@t:arg{(x) -> @E[#:tag 'cont @haskell{x}]})}]}
+      (~> @elem{@E[#:tag 'cont @app[@haskell{call_cc} @t:fn{@mathv{f}}]] @matht{⟶}
+                @E[#:tag 'cont @app[@t:fn{@mathv{f}} (juxt-parens @haskell{@t:arg{@lam[@haskell{x}] @E[#:tag 'cont @haskell{x}]}})]]}
           (delay-highlight 'fn)
           (delay-highlight 'arg)))
      (vc-append
@@ -1377,10 +1482,10 @@
          @simple{1 + (@hole[#:color #f] * 2)}
          (blank 40)
          (pict-when (s:expand?)
-           @haskell{print(1 + (@hole[] * 2))
-                    shutdown_runtime()
-                    run_libc_atexit()
-                    exit_process()}))
+           @haskell{@app[@haskell{print} (juxt-parens @haskell{1 + (@hole[] * 2)})]
+                    @app[@haskell{shutdown_runtime}]
+                    @app[@haskell{run_libc_atexit}]
+                    @app[@haskell{exit_process}]}))
         (inset 40))
     #:where
     (define (simple . elems)
@@ -1405,8 +1510,8 @@
       (blank 0 60)
       (~> (vc-append
            10
-           @elem{@E_1[#:tag 'cont1 @haskell{prompt{@E_2[#:tag 'cont2.1 @haskell{control(@t:fn{@mathv{f}})}]}}]}
-           @elem{@matht{⟶} @E_1[#:tag 'cont1 @haskell{@t:fn{@mathv{f}}(@t:arg{(x) -> @E_2[#:tag 'cont2.2 @haskell{x}]})}]})
+           @elem{@E_1[#:tag 'cont1 @haskell{prompt@prompt-args[@E_2[#:tag 'cont2.1 @app[@haskell{control} @t:fn{@mathv{f}}]]]}]}
+           @elem{@matht{⟶} @E_1[#:tag 'cont1 @app[@t:fn{@mathv{f}} (juxt-parens @haskell{@t:arg{@lam[@haskell{x}] @E_2[#:tag 'cont2.2 @haskell{x}]}})]]})
           (delay-highlight 'fn)
           (delay-highlight 'arg))
       (blank 0 50))))
@@ -1420,7 +1525,7 @@
     (tl:flags s:split? s:inside-out? s:recombine?)
 
     (~> (vc-append
-         @haskell{@t:cont-o1{1 +} prompt{@t:cont-i1{2 *} control(@t:fn1{(k) -> k(3) + k(5)})}}
+         @haskell{@t:cont-o1{1 +} prompt@prompt-args[@haskell{@t:cont-i1{2 *} @app[@haskell{control} (juxt-parens @haskell{@t:fn1{@lam[@haskell{k}] @app[@haskell{k} @haskell{3}] + @app[@haskell{k} @haskell{5}]}})]}]}
          (blank 0 50)
          (pict-when (s:split?)
            (htl-append
@@ -1428,17 +1533,17 @@
             (blank 70 0)
             @haskell{@t:cont-i2{2 * @hole[]}}
             (blank 70 0)
-            @haskell{@t:fn2{(k) -> k(3) + k(5)}}))
+            @haskell{@t:fn2{@lam[@haskell{k}] @app[@haskell{k} @haskell{3}] + @app[@haskell{k} @haskell{5}]}}))
          (blank 0 50)
          (pict-when (s:inside-out?)
            (htl-append
             (blank 150 0)
-            @haskell{let k = @t:cont-i3{(x) -> 2 * x}
-                     @t:fn3{k(3) @t:inside-out1{+} k(5)}}))
+            @haskell{let k = @t:cont-i3{@lam[@haskell{x}] 2 * x}
+                     @t:fn3{@app[@haskell{k} @haskell{3}] @t:inside-out1{+} @app[@haskell{k} @haskell{5}]}}))
          (blank 0 50)
          (pict-when (s:recombine?)
-           @haskell{@t:cont-o3{1 +} (let k @t:inside-out2{=} (x) -> 2 * x
-                         k(3) + k(5))})
+           @haskell{@t:cont-o3{1 +} (let k @t:inside-out2{=} @lam[@haskell{x}] 2 * x
+                         @app[@haskell{k} @haskell{3}] + @app[@haskell{k} @haskell{5}])})
          (blank 0 50))
         (when~> (s:split?)
           (pin-arrow 'cont-o1 cb-find #:start-angle (turns 3/4)
@@ -1469,9 +1574,9 @@
 
     (reduction-steps
      #:stage (s:stage)
-     @haskell{1 + prompt{@t:cont{2 *} control((k) -> k(3) + k(5))}}
-     @haskell{1 + (let k = @t:fn{(x) -> 2 * x}
-                   @t:redex1{k(3)} + @t:redex1{k(5)})}
+     @haskell{1 + prompt@prompt-args[@haskell{@t:cont{2 *} @app[@haskell{control} (juxt-parens @haskell{@lam[@haskell{k}] @app[@haskell{k} @haskell{3}] + @app[@haskell{k} @haskell{5}]})]}]}
+     @haskell{1 + (let k = @t:fn{@lam[@haskell{x}] 2 * x}
+                   @t:redex1{@app[@haskell{k} @haskell{3}]} + @t:redex1{@app[@haskell{k} @haskell{5}]})}
      @haskell{1 + @t:redex2{(@t:redex1{6} + @t:redex1{10})}}
      @haskell{@(ghost @haskell{1})1 + @t:redex2{16}}
      @haskell{17}))
@@ -1495,10 +1600,10 @@
      (~> (vl-append
           10
           (blank 0 50)
-          @elem{@(rtl-superimpose (launder (ghost (handle-lhs))) (catch-lhs)) @matht{⟶} @E_1[@haskell{@t:rfn{@mathv{f}}(@t:exn{@mathv{v}})}]}
-          @elem{@(rtl-superimpose (launder (ghost (handle-lhs))) (prompt-lhs)) @matht{⟶} @E_1[@haskell{@t:rfn{@mathv{f}}(@t:cont{(x) -> @E_2[@haskell{x}]})}]}
+          @elem{@(rtl-superimpose (launder (ghost (handle-lhs))) (catch-lhs)) @matht{⟶} @E_1[@app[@t:rfn{@mathv{f}} @t:exn[@mathv{v}]]]}
+          @elem{@(rtl-superimpose (launder (ghost (handle-lhs))) (prompt-lhs)) @matht{⟶} @E_1[@app[@t:rfn{@mathv{f}} (juxt-parens @haskell{@t:cont{@lam[@haskell{x}] @E_2[@haskell{x}]}})]]}
           (pict-when (s:delimit?) #:launder? #t
-            @elem{@(handle-lhs) @matht{⟶} @E_1[@haskell{@t:rfn{@mathv{f}}(@t:exn{@mathv{v}}, @t:cont{(x) -> @E_2[@haskell{x}]})}]})
+            @elem{@(handle-lhs) @matht{⟶} @E_1[@app[@t:rfn{@mathv{f}} @t:exn{@mathv{v}} @t:cont{@haskell{@lam[@haskell{x}] @E_2[@haskell{x}]}}]]})
           (blank 0 50))
          (delay-highlight 'delimiter)
          (delay-highlight 'yield)
@@ -1511,11 +1616,11 @@
 
     #:where
     (define (catch-lhs)
-      @E_1[@haskell{@t:delimiter{catch}{@E_2[@haskell{@t:yield{throw}(@t:exn{@mathv{v}})}],@t:lfn1{@mathv{f}}}}])
+      @E_1[@haskell{@t:delimiter{catch}@catch-args[@E_2[@haskell{@app[@haskell{@t:yield{throw}} @t:exn{@mathv{v}}]}] @t:lfn1{@mathv{f}}]}])
     (define (prompt-lhs)
-      @E_1[@haskell{@t:delimiter{prompt}{@E_2[@haskell{@t:yield{control}(@t:lfn2{@mathv{f}})}]}}])
+      @E_1[@haskell{@t:delimiter{prompt}@prompt-args[@E_2[@haskell{@app[@haskell{@t:yield{control}} @t:lfn2{@mathv{f}}]}]]}])
     (define (handle-lhs)
-      @E_1[@haskell{@t:delimiter{delimit}{@E_2[@haskell{@t:yield{yield}(@t:exn{@mathv{v}})}],@t:lfn2{@mathv{f}}}}]))
+      @E_1[@haskell{@t:delimiter{delimit}@catch-args[@E_2[@haskell{@app[@haskell{@t:yield{yield}} @t:exn{@mathv{v}}]}] @t:lfn2{@mathv{f}}]}]))
 
   (slides ([s:split? #f] [s:inside-out? #f] [s:recombine? #f])
     #:with c:flavors (hash 'cont-o1 1 'cont-o2 1 'cont-o3 1 'fn1 2 'fn2 2 'fn3 2 'resume 2)
@@ -1527,8 +1632,8 @@
     (tl:flags s:split? s:inside-out? s:recombine?)
 
     (~> (vc-append
-         @haskell{@t:cont-o1{1 +} delimit{@t:body{@t:cont-i1{2 *} @t:throw{yield(())}},
-                              @t:fn1{((), @t:resume{k}) -> k(3) + k(5)}}}
+         @haskell{@t:cont-o1{1 +} delimit@catch-args*[@haskell{@t:body{@t:cont-i1{2 *} @t:throw{@app[@haskell{yield} @haskell{()}]}}}
+                                                      (juxt-parens @haskell{@t:fn1{@lam[@haskell{()} @haskell{@t:resume{k}}]} @app[@haskell{k} @haskell{3}] + @app[@haskell{k} @haskell{5}]})]}
          (blank 0 50)
          (pict-when (s:split?)
            (htl-append
@@ -1536,17 +1641,17 @@
             (blank 70 0)
             @haskell{@t:cont-i2{2 * @hole[]}}
             (blank 70 0)
-            @haskell{@t:fn2{((), k) -> k(3) + k(5)}}))
+            @haskell{@t:fn2{@lam[@haskell{()} @haskell{k}] @app[@haskell{k} @haskell{3}] + @app[@haskell{k} @haskell{5}]}}))
          (blank 0 50)
          (pict-when (s:inside-out?)
            (htl-append
             (blank 150 0)
-            @haskell{let k = @t:cont-i3{(x) -> 2 * x}
-                     @t:fn3{k(3) @t:inside-out1{+} k(5)}}))
+            @haskell{let k = @t:cont-i3{@lam[@haskell{x}] 2 * x}
+                     @t:fn3{@app[@haskell{k} @haskell{3}] @t:inside-out1{+} @app[@haskell{k} @haskell{5}]}}))
          (blank 0 50)
          (pict-when (s:recombine?)
-           @haskell{@t:cont-o3{1 +} (let k @t:inside-out2{=} (x) -> 2 * x
-                         k(3) + k(5))})
+           @haskell{@t:cont-o3{1 +} (let k @t:inside-out2{=} @lam[@haskell{x}] 2 * x
+                         @app[@haskell{k} @haskell{3}] + @app[@haskell{k} @haskell{5}])})
          (blank 0 50))
         (when~> (s:split?)
           (pin-arrow 'cont-o1 cb-find #:start-angle (turns 3/4)
@@ -1595,14 +1700,14 @@
      #:stage (s:stage)
      #:append vc-append
      (scale @elem{Even typing exceptions is hard!} 1.3)
-     (vc-append (blank 0 80) @haskell{throw : @t:Exn1{Exception} -> @t:var-a{a}})
-     (vc-append (blank 0 40) @haskell{catch{body, handler} : @t:var-b{b}})
+     (vc-append (blank 0 80) @haskell{throw @(::) @t:Exn1{Exception} -> @t:var-a{a}})
+     (vc-append (blank 0 40) @haskell{catch@catch-args[@haskell{body} @haskell{handler}] @(::) @t:var-b{b}})
      (vc-append
       (blank 0 10)
       (vc-append
-       @haskell{body : @t:var-b{b}}
+       @haskell{body @(::) @t:var-b{b}}
        (blank 0 10)
-       @haskell{handler : @t:Exn2{Exception} -> @t:var-b{b}})
+       @haskell{handler @(::) @t:Exn2{Exception} -> @t:var-b{b}})
       (blank 50))))
 
   (slides ([s:stage 0])
@@ -1612,18 +1717,18 @@
     (steps
      #:stage (s:stage)
      #:append vc-append
-     @haskell{yield : DelimiterTag -> @t:var-a{a}}
-     (vc-append (blank 0 50) @haskell{delimit{body, handler} : @t:var-b{b}})
+     @haskell{yield @(::) DelimiterTag -> @t:var-a{a}}
+     (vc-append (blank 0 50) @haskell{delimit@catch-args[@haskell{body} @haskell{handler}] @(::) @t:var-b{b}})
      (vc-append
       (blank 0 10)
       (vc-append
-       @haskell{body : @t:var-b{b}}
+       @haskell{body @(::) @t:var-b{b}}
        (blank 0 10)
-       @haskell{handler : DelimiterTag -> @t:resume{(@t:var-a{a} -> @t:var-b{b})} -> @t:var-b{b}})
+       @haskell{handler @(::) DelimiterTag -> @t:resume{(@t:var-a{a} -> @t:var-b{b})} -> @t:var-b{b}})
       (blank 50))
      (~> (vc-append
-          @elem{@E_1[@haskell{@t:delimit{delimit{@E_2[#:tag 'cont @haskell{@t:yield{yield(@t:exn{@mathv{v}})}}], @mathv{f}}}}]}
-          @elem{@matht{⟶} @E_1[@haskell{@t:rfn{@mathv{f}}(@t:exn{@mathv{v}}, (x) -> @E_2[@haskell{x}])}]})
+          @elem{@E_1[@haskell{@t:delimit{delimit@catch-args[@E_2[#:tag 'cont @haskell{@t:yield{@app[@haskell{yield} @t:exn{@mathv{v}}]}}] @mathv{f}]}}]}
+          @elem{@matht{⟶} @E_1[@app[@t:rfn{@mathv{f}} @t:exn{@mathv{v}} (juxt-parens @haskell{@lam[@haskell{x}] @E_2[@haskell{x}]})]]})
          (delay-highlight 'delimit)
          (delay-highlight 'yield))))
 
@@ -1633,16 +1738,16 @@
     (steps
      #:stage (s:stage)
      #:append vc-append
-     @haskell{prompt{body} : @t:var-b{b}}
-     (vc-append (blank 0 10) @haskell{body : @t:var-b{b}})
+     @haskell{prompt@prompt-args[@haskell{body}] @(::) @t:var-b{b}}
+     (vc-append (blank 0 10) @haskell{body @(::) @t:var-b{b}})
      (vc-append
       (blank 0 40)
-      @haskell{control : (@t:cont{(@t:var-a{a} -> @t:var-b{b})} -> @t:var-b{b}) -> @t:var-a{a}}
+      @haskell{control @(::) (@t:cont{(@t:var-a{a} -> @t:var-b{b})} -> @t:var-b{b}) -> @t:var-a{a}}
       (blank 0 50))
      (~> (vc-append
            10
-           @elem{@E_1[@haskell{@t:delimit{prompt{@E_2[#:tag 'cont @haskell{@t:yield{control(@mathv{f})}}]}}}]}
-           @elem{@matht{⟶} @E_1[@haskell{@t:fn{@mathv{f}}(@t:arg{(x) -> @E_2[#:tag 'cont2.2 @haskell{x}]})}]})
+           @elem{@E_1[@haskell{@t:delimit{prompt@prompt-args[@E_2[#:tag 'cont @haskell{@t:yield{@app[@haskell{control} @mathv{f}]}}]]}}]}
+           @elem{@matht{⟶} @E_1[@app[@t:fn{@mathv{f}} (juxt-parens @haskell{@t:arg{@lam[@haskell{x}] @E_2[#:tag 'cont2.2 @haskell{x}]}})]]})
          (delay-highlight 'delimit)
          (delay-highlight 'yield))))
 
@@ -1654,24 +1759,26 @@
     (steps
      #:stage (s:stage)
      #:append vc-append
-     (vc-append (blank 0 50) @haskell{new_prompt_tag : () -> @PromptTag<b>[]})
-     (vc-append (blank 0 40) @haskell{prompt{tag, body} : @t:var-b{b}})
-     (vc-append (blank 0 10) @haskell{tag : @PromptTag<b>[]} (blank 0 10) @haskell{body : @t:var-b{b}})
+     (vc-append (blank 0 50) @haskell{new_prompt_tag @(::) () -> @PromptTag<b>[]})
+     (vc-append (blank 0 40) @haskell{prompt@prompt-args[@haskell{tag} @haskell{body}] @(::) @t:var-b{b}})
+     (vc-append (blank 0 10) @haskell{tag @(::) @PromptTag<b>[]} (blank 0 10) @haskell{body @(::) @t:var-b{b}})
      (vc-append
       (blank 0 40)
-      @haskell{control : (@PromptTag<b>[], (@t:cont{(@t:var-a{a} -> @t:var-b{b})} -> @t:var-b{b})) -> @t:var-a{a}}
+      @haskell{control @(::) @fn-ty[@PromptTag<b>[] @haskell{(@t:cont{(@t:var-a{a} -> @t:var-b{b})} -> @t:var-b{b})} @haskell{@t:var-a{a}}]}
       (blank 0 50))
      (~> (vc-append
            10
-           @elem{@E_1[@haskell{@t:delimit{prompt{@mathit{tag}, @E_2[#:tag 'cont @haskell{@t:yield{control(@mathit{tag}, @mathv{f})}}]}}}]}
-           @elem{@matht{⟶} @E_1[@haskell{@t:fn{@mathv{f}}(@t:arg{(x) -> @E_2[#:tag 'cont2.2 @haskell{x}]})}]})
+           @elem{@E_1[@haskell{@t:delimit{prompt@prompt-args[@mathit{tag} @E_2[#:tag 'cont @haskell{@t:yield{@app[@haskell{control} @mathit{tag} @mathv{f}]}}]]}}]}
+           @elem{@matht{⟶} @E_1[@app[@t:fn{@mathv{f}} (juxt-parens @haskell{@t:arg{@lam[@haskell{x}] @E_2[#:tag 'cont2.2 @haskell{x}]}})]]})
          (delay-highlight 'delimit)
          (delay-highlight 'yield)))
     #:where
     (define (bracket str)
       (colorize (tt str) (current-base-color)))
     (define (PromptTag<b>)
-      (~> @haskell{PromptTag@bracket{<}@t:var-b{b}@bracket{>}}
+      (~> (match (current-syntax)
+            ['pseudo  @haskell{PromptTag@bracket{<}@t:var-b{b}@bracket{>}}]
+            ['haskell @haskell{PromptTag @t:var-b{b}}])
           (delay-highlight 'var-b)))))
 
 (begin
@@ -1732,11 +1839,11 @@
     (vc-append
      (reduction-steps
       #:stage (if (s:stack?) 2 1)
-      @haskell{1 + prompt{tag, f(true, @hole[]) * 5}}
+      @haskell{1 + prompt@prompt-args[@haskell{tag} @haskell{@app[@haskell{f} @True[] @hole[]] * 5}]}
       (cont-stack
-       @haskell{f(true, @hole[])}
+       @haskell{@app[@haskell{f} @True[] @hole[]]}
        @haskell{@hole[] * 5}
-       @haskell{prompt{tag, @hole[]}}
+       @haskell{prompt@prompt-args[@haskell{tag} @hole[]]}
        @haskell{1 + @hole[]}))
      (blank 0 10)
      (pict-when (s:label?)
@@ -1756,20 +1863,18 @@
            @elem{redex: }
            (pict-cond
             [(eq? (s:stage) 'replaced-redex)
-             (htl-append @haskell{g(}
-                         (if (eq? (s:stage) 'replaced-redex)
-                             cont-closure
-                             (launder cont-closure))
-                         @haskell{)})]
+             @app[@haskell{g} (if (eq? (s:stage) 'replaced-redex)
+                                  cont-closure
+                                  (launder cont-closure))]]
             [(eq? (s:stage) 'apply-cont)
-             (htl-append (if (memq (s:stage) '(apply-cont copy-back))
-                             cont-closure
-                             (launder cont-closure))
-                         @haskell{("hello")})]
+             @app[(one-line* (if (memq (s:stage) '(apply-cont copy-back))
+                                 cont-closure
+                                 (launder cont-closure)))
+                  @haskell{"hello"}]]
             [(memq (s:stage) '(copy-back copied-back))
              @haskell{"hello"}]
             [else
-             @haskell{control(tag, g)}]))
+             @app[@haskell{control} @haskell{tag} @haskell{g}]]))
           (blank 0 10)
           (htl-append
            (rtl-superimpose (ghost @elem{redex: }) @elem{stack: })
@@ -1815,7 +1920,7 @@
               (blank 10 0)
               (t:heap-cont
                (cont-stack
-                (tagged (and (eq? (s:stage) 'copy) 'frame1) @haskell{f(true, @hole[])})
+                (tagged (and (eq? (s:stage) 'copy) 'frame1) @app[@haskell{f} @True[] @hole[]])
                 (tagged (and (eq? (s:stage) 'copy) 'frame2) @haskell{@hole[] * 5})))))))
          (pict-when (s:memcpy?)
            @elem{Capture/restore are just @haskell{memcpy}!}))
@@ -1823,9 +1928,9 @@
           (pin-arrow 'cont-ptr cb-find #:start-angle (turns 3/4)
                      'heap-cont lt-find #:end-angle (turns 7/8) #:end-pull 1/5)))
     #:where
-    (define frame1 @haskell{f(true, @hole[])})
+    (define frame1 @app[@haskell{f} @True[] @hole[]])
     (define frame2 @haskell{@hole[] * 5})
-    (define frame3 @haskell{prompt{tag, @hole[]}})
+    (define frame3 @haskell{prompt@prompt-args[@haskell{tag} @hole[]]})
     (define frame4 @haskell{1 + @hole[]})
     (define frame-sizer (ghost (launder frame3)))
 

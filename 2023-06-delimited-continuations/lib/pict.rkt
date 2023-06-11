@@ -50,6 +50,7 @@
 
                        [em (->* [] [real?] real?)]
                        [one-line (-> pict? pict?)]
+                       [one-line* (-> pict? pict?)]
                        [indent (->* [pict?] [#:by real?] pict?)]
                        [pip (case-> (-> pict? pict-finder/c pict?)
                                     (-> pict?
@@ -288,8 +289,19 @@
 ; Drops the ascent line to the descent line, making the entire pict behave as a
 ; single line of text.
 (define (one-line p)
-  (define ascent (- (pict-height p) (pict-descent p)))
-  (pin-over (blank (pict-width p) (pict-height p) ascent (pict-descent p)) 0 0 p))
+  (pin-over (blank (pict-width p)
+                   (pict-height p)
+                   (- (pict-height p) (pict-descent p))
+                   (pict-descent p))
+            0 0 p))
+
+; Like `one-line`, but lifts the descent line to the ascent line.
+(define (one-line* p)
+  (pin-over (blank (pict-width p)
+                   (pict-height p)
+                   (pict-ascent p)
+                   (- (pict-height p) (pict-ascent p)))
+            0 0 p))
 
 (define (indent #:by [n (em)] p) (inset p n 0 0 0))
 

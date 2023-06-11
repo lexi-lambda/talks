@@ -18,12 +18,16 @@ else
 	SLIDES_DEPS  += $(LIB_ZOS)
 endif
 
-all: slides.pdf slides-uncondensed.pdf
+all: lambda-days.pdf lambda-days-uncondensed.pdf zurihac.pdf zurihac-uncondensed.pdf
 
-slides.pdf: $(SLIDES_DEPS)
-	slideshow $(SLIDESHOW_OPTS) --condense -o slides.pdf main.rkt
-slides-uncondensed.pdf: $(SLIDES_DEPS)
-	slideshow $(SLIDESHOW_OPTS) -o slides-uncondensed.pdf main.rkt
+lambda-days.pdf: $(SLIDES_DEPS)
+	VENUE=lambda-days slideshow $(SLIDESHOW_OPTS) --condense -o lambda-days.pdf main.rkt
+lambda-days-uncondensed.pdf: $(SLIDES_DEPS)
+	VENUE=lambda-days slideshow $(SLIDESHOW_OPTS) -o lambda-days-uncondensed.pdf main.rkt
+zurihac.pdf: $(SLIDES_DEPS)
+	VENUE=zurihac slideshow $(SLIDESHOW_OPTS) --condense -o zurihac.pdf main.rkt
+zurihac-uncondensed.pdf: $(SLIDES_DEPS)
+	VENUE=zurihac slideshow $(SLIDESHOW_OPTS) -o zurihac-uncondensed.pdf main.rkt
 
 lib/$(ZO_PREFIX)/slideshow_rkt.zo: lib/$(ZO_PREFIX)/pict_rkt.zo lib/$(ZO_PREFIX)/util_rkt.zo
 
